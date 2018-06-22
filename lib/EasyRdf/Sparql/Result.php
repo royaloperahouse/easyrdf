@@ -44,6 +44,9 @@
  */
 class EasyRdf_Sparql_Result extends ArrayIterator
 {
+    private $data = null;
+    private $mimeType = null;
+
     private $type = null;
     private $boolean = null;
 
@@ -65,6 +68,8 @@ class EasyRdf_Sparql_Result extends ArrayIterator
      */
     public function __construct($data, $mimeType)
     {
+        $this->data = $data;
+        $this->mimeType = $mimeType;
         if ($mimeType == 'application/sparql-results+xml') {
             return $this->parseXml($data);
         } elseif ($mimeType == 'application/sparql-results+json') {
@@ -144,6 +149,24 @@ class EasyRdf_Sparql_Result extends ArrayIterator
     public function getFields()
     {
         return $this->fields;
+    }
+
+    /** Get the raw data returned for the query.
+     *
+     * @return string The response body returned by the server.
+     */
+    public function getData()
+    {
+        return $this->data;
+    }
+
+    /** Get the MIME type of the response.
+     *
+     * @return string The content MIME type returned by the server.
+     */
+    public function getMimeType()
+    {
+        return $this->mimeType;
     }
 
     /** Return a human readable view of the query result.

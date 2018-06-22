@@ -108,11 +108,12 @@ class EasyRdf_Sparql_Client
      * of type EasyRdf_Graph.
      *
      * @param string $query The query string to be executed
+     * @param array $httpGetParameters Associative array containing parameters to append to the GET request URL
      * @return object EasyRdf_Sparql_Result|EasyRdf_Graph Result of the query.
      */
-    public function query($query)
+    public function query($query, $httpGetParameters = array ())
     {
-        return $this->request('query', $query);
+        return $this->request('query', $query, $httpGetParameters);
     }
 
     /** Count the number of triples in a SPARQL 1.1 endpoint
@@ -222,7 +223,7 @@ class EasyRdf_Sparql_Client
      *
      * @ignore
      */
-    protected function request($type, $query)
+    protected function request($type, $query, $httpGetParameters = array ())
     {
         // Check for undefined prefixes
         $prefixes = '';
@@ -252,15 +253,38 @@ class EasyRdf_Sparql_Client
             $client->setHeaders('Content-Type', 'application/sparql-update');
         } elseif ($type == 'query') {
             // Use GET if the query is less than 2kB
+            $encodedGetParameterStrings = array ();
+            foreach ($httpGetParameters as $key => $value) {
+                if ($value === null) {
+                    $encodedGetParameterStrings[] = urlencode($key);
+                } elseif ($key !== '') {
+                    $encodedGetParameterStrings[] = urlencode($key) . '=' . urlencode($value);
+                }
+            }
+            $encodedQuery = 'query=' . urlencode($prefixes . $query); // might be passed via GET or POST
+            if (!empty($encodedGetParameterStrings)) {
+                $encodedGetParameterStrings[] = $encodedQuery;
+                sort($encodedGetParameterStrings, SORT_NATURAL); // use a canonical (alphabetical) order to help caching
+                $httpGetParameterString = implode('&', $encodedGetParameterStrings);
+            } else {
+                $httpGetParameterString = $encodedQuery;
+            }
             // 2046 = 2kB minus 1 for '?' and 1 for NULL-terminated string on server
-            $encodedQuery = 'query='.urlencode($prefixes . $query);
-            if (strlen($encodedQuery) + strlen($this->queryUri) <= 2046) {
+            if (strlen($httpGetParameterString) + strlen($this->queryUri) <= 2046) {
                 $client->setMethod('GET');
-                $client->setUri($this->queryUri.'?'.$encodedQuery);
+                $client->setUri($this->queryUri . '?' . $httpGetParameterString);
             } else {
                 // Fall back to POST instead (which is un-cacheable)
+                // this code assumes that it is just the query that causes the URI to exceed 2048 bytes
+                if (!empty($encodedGetParameterStrings)) {
+                    $key = array_search($encodedQuery, $encodedGetParameterStrings);
+                    if ($key !== false) {
+                        unset($encodedGetParameterStrings[$key]);
+                    }
+                    $httpGetParameterString = '?' . implode('&', $encodedGetParameterStrings);
+                }
                 $client->setMethod('POST');
-                $client->setUri($this->queryUri);
+                $client->setUri($this->queryUri . $httpGetParameterString);
                 $client->setRawData($encodedQuery);
                 $client->setHeaders('Content-Type', 'application/x-www-form-urlencoded');
             }
